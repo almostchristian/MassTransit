@@ -5,6 +5,7 @@ namespace MassTransit.ActiveMqTransport
     using System.Threading;
     using System.Threading.Tasks;
     using Apache.NMS;
+    using Apache.NMS.ActiveMQ.Commands;
     using Configuration;
     using Internals;
     using Transports;
@@ -80,6 +81,21 @@ namespace MassTransit.ActiveMqTransport
 
             transportMessage.Content = context.Body.GetBytes();
 
+            if (transportMessage is ActiveMQMessage amqMessage)
+            {
+                if (context.Headers.TryGetHeader(HeaderNames.GroupID, out var groupIdObj) && groupIdObj is string groupId)
+                {
+                    amqMessage.GroupID = groupId;
+                    context.Headers.Set(HeaderNames.GroupID, null);
+                }
+
+                if (context.Headers.TryGetHeader(HeaderNames.GroupSequence, out var groupSeqObj) && groupSeqObj is int groupSeq)
+                {
+                    amqMessage.GroupSequence = groupSeq;
+                    context.Headers.Set(HeaderNames.GroupSequence, null);
+                }
+            }
+
             transportMessage.Properties.SetHeaders(context.Headers);
 
             transportMessage.Properties[MessageHeaders.ContentType] = context.ContentType.ToString();
@@ -110,6 +126,12 @@ namespace MassTransit.ActiveMqTransport
             var publishTask = Task.Run(() => producer.Send(transportMessage), context.CancellationToken);
 
             await publishTask.OrCanceled(context.CancellationToken).ConfigureAwait(false);
+        }
+
+        static class HeaderNames
+        {
+            public const string GroupID = "JMSXGroupID";
+            public const string GroupSequence = "JMSXGroupSeq";
         }
     }
 }
